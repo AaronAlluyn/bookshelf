@@ -11,6 +11,9 @@ using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.BookImport;
 using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.Messaging.Events;
+#if true // [FIX] Needed for QualityModel in DownloadIgnoredEvent
+using NzbDrone.Core.Qualities;
+#endif
 
 namespace NzbDrone.Core.Download
 {
@@ -106,6 +109,50 @@ namespace NzbDrone.Core.Download
 
             if (importResults.Any(c => c.Result != ImportResultType.Imported))
             {
+#if true // [FIX] Discard non-upgrade downloads without deadlocking the queue
+                var nonImported = importResults.Where(c => c.Result != ImportResultType.Imported).ToList();
+                var allRejectedDueToExisting = nonImported.Any() && nonImported.All(r =>
+                    r.Errors != null && r.Errors.Any(e =>
+                        e.IndexOf("Not an upgrade", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        e.IndexOf("already imported", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        e.IndexOf("Existing file on disk", StringComparison.OrdinalIgnoreCase) >= 0
+                    )
+                );
+
+                if (allRejectedDueToExisting)
+                {
+                    _logger.Info("Download '{0}' contains only files that are not an upgrade or already imported. Discarding to unblock queue.", trackedDownload.DownloadItem.Title);
+                    trackedDownload.State = TrackedDownloadState.Ignored;
+                    trackedDownload.IsTrackable = false;
+
+                    var bookIds = trackedDownload.RemoteBook?.Books?.Select(b => b.Id).ToList()
+                                  ?? nonImported.Select(r => r.ImportDecision.Item?.Book?.Id ?? 0).Where(id => id != 0).Distinct().ToList();
+
+                    if (!bookIds.Any())
+                    {
+                        bookIds = new List<int> { 0 };
+                    }
+
+                    var authorId = trackedDownload.RemoteBook?.Author?.Id
+                                   ?? nonImported.Select(r => r.ImportDecision.Item?.Author?.Id ?? 0).FirstOrDefault(id => id != 0);
+
+                    var ignoredEvent = new DownloadIgnoredEvent
+                    {
+                        AuthorId = authorId,
+                        BookIds = bookIds,
+                        Quality = trackedDownload.RemoteBook?.ParsedBookInfo?.Quality ?? new QualityModel(Quality.Unknown),
+                        SourceTitle = trackedDownload.DownloadItem.Title,
+                        DownloadClientInfo = trackedDownload.DownloadItem.DownloadClientInfo,
+                        DownloadId = trackedDownload.DownloadItem.DownloadId,
+                        Message = "Not an upgrade for existing book file(s)",
+                        TrackedDownload = trackedDownload
+                    };
+
+                    _eventAggregator.PublishEvent(ignoredEvent);
+                    _eventAggregator.PublishEvent(new DownloadCanBeRemovedEvent(trackedDownload));
+                    return;
+                }
+#endif
                 trackedDownload.State = TrackedDownloadState.ImportFailed;
                 var statusMessages = importResults
                     .Where(v => v.Result != ImportResultType.Imported && v.ImportDecision.Item != null)

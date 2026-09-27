@@ -141,7 +141,19 @@ namespace NzbDrone.Core.Books
 
             foreach (var s in remoteData.Series.Value)
             {
+#if true // [FEATURE] Bind series book link to local database book entity
+                s?.LinkItems?.Value.ForEach(x =>
+                {
+                    x.Series = s;
+                    if (bookDict.TryGetValue(x.Book.Value.ForeignBookId, out var localBook))
+                    {
+                        x.Book = localBook;
+                    }
+                });
+#else
                 s?.LinkItems?.Value.ForEach(x => x.Series = s);
+#endif
+
                 var booksToAdd = s?.LinkItems?.Value
                     .Where(x => bookDict.ContainsKey(x.Book.Value.ForeignBookId)) ?? new List<SeriesBookLink>();
                 links.AddRange(booksToAdd);

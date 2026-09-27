@@ -229,6 +229,20 @@ namespace NzbDrone.Core.Books
         {
             var filtered = _metadataProfileService.FilterBooks(remote, local.MetadataProfileId);
 
+#if true // [FEATURE] Ensure all series books are ingested for complete series visibility
+            // Ensure any book linked to the author's series is retained, even if excluded by metadata profile filters
+            var seriesLinks = remote.Series?.Value?
+                .SelectMany(s => s.LinkItems?.Value ?? Enumerable.Empty<SeriesBookLink>())
+                .Where(l => l.Book?.Value != null)
+                .ToList() ?? new List<SeriesBookLink>();
+
+            if (seriesLinks.Any())
+            {
+                var seriesBooks = seriesLinks.Select(l => l.Book.Value).ToList();
+                filtered = filtered.UnionBy(seriesBooks, b => b.ForeignBookId).ToList();
+            }
+#endif
+
             var all = filtered.DistinctBy(m => m.ForeignBookId).ToList();
             var ids = all.Select(x => x.ForeignBookId).ToList();
             var excluded = _importListExclusionService.FindByForeignId(ids).Select(x => x.ForeignId).ToList();

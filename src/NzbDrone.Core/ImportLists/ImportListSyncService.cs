@@ -177,6 +177,23 @@ namespace NzbDrone.Core.ImportLists
 
                 try
                 {
+#if true // [HARDCOVER] Prefer searching configured metadata source (Hardcover) when title & author are known
+                    if (report.Book.IsNotNullOrWhiteSpace() && _bookInfoProxy is ISearchForNewBook searchProxy)
+                    {
+                        var searchResults = searchProxy.SearchForNewBook(report.Book, report.Author, false);
+                        var matchedBook = searchResults.FirstOrDefault();
+
+                        if (matchedBook != null)
+                        {
+                            _logger.Trace($"Mapped Book '{report.Book}' by '{report.Author}' via metadata search to [{matchedBook.ForeignBookId}] {matchedBook.Title}");
+                            report.BookGoodreadsId = matchedBook.ForeignBookId;
+                            report.Book = matchedBook.Title;
+                            report.Author ??= matchedBook.Author.Value?.Name;
+                            report.AuthorGoodreadsId = matchedBook.Author.Value?.ForeignAuthorId;
+                            return;
+                        }
+                    }
+#endif
                     var remoteBook = _goodreadsProxy.GetBookInfo(report.EditionGoodreadsId);
 
                     _logger.Trace($"Mapped {report.EditionGoodreadsId} to [{remoteBook.ForeignBookId}] {remoteBook.Title}");
@@ -186,11 +203,19 @@ namespace NzbDrone.Core.ImportLists
                     report.Author ??= remoteBook.AuthorMetadata.Value.Name;
                     report.AuthorGoodreadsId ??= remoteBook.AuthorMetadata.Value.ForeignAuthorId;
                 }
+#if true // [HARDCOVER] Catch all exceptions from Goodreads proxy so upstream blocks do not crash sync
+                catch (Exception ex)
+                {
+                    _logger.Debug(ex, $"Nothing found for edition [{report.EditionGoodreadsId}]");
+                    report.EditionGoodreadsId = null;
+                }
+#else
                 catch (BookNotFoundException)
                 {
                     _logger.Debug($"Nothing found for edition [{report.EditionGoodreadsId}]");
                     report.EditionGoodreadsId = null;
                 }
+#endif
             }
             else if (report.BookGoodreadsId.IsNotNullOrWhiteSpace())
             {
@@ -202,6 +227,30 @@ namespace NzbDrone.Core.ImportLists
             }
             else
             {
+#if true // [HARDCOVER] Fallback to title/author search against configured metadata source
+                if (report.Book.IsNotNullOrWhiteSpace() && _bookInfoProxy is ISearchForNewBook searchProxy)
+                {
+                    try
+                    {
+                        var searchResults = searchProxy.SearchForNewBook(report.Book, report.Author, false);
+                        var matchedBook = searchResults.FirstOrDefault();
+
+                        if (matchedBook != null)
+                        {
+                            _logger.Trace($"Mapped Book '{report.Book}' by '{report.Author}' via metadata search to [{matchedBook.ForeignBookId}] {matchedBook.Title}");
+                            report.BookGoodreadsId = matchedBook.ForeignBookId;
+                            report.Book = matchedBook.Title;
+                            report.Author ??= matchedBook.Author.Value?.Name;
+                            report.AuthorGoodreadsId = matchedBook.Author.Value?.ForeignAuthorId;
+                            return;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Debug(ex, $"Failed to search metadata provider for '{report.Book}' by '{report.Author}'");
+                    }
+                }
+#endif
                 var mappedBook = _goodreadsSearchProxy.Search($"{report.Book} {report.Author}").FirstOrDefault();
 
                 if (mappedBook == null)
