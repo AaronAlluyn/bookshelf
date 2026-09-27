@@ -136,7 +136,7 @@ namespace NzbDrone.Core.Download
 
                     var ignoredEvent = new DownloadIgnoredEvent
                     {
-                        AuthorId = authorId ?? 0,
+                        AuthorId = authorId,
                         BookIds = bookIds,
                         Quality = trackedDownload.RemoteBook?.ParsedBookInfo?.Quality ?? new QualityModel(Quality.Unknown),
                         SourceTitle = trackedDownload.DownloadItem.Title,
