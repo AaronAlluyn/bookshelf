@@ -204,7 +204,12 @@ namespace NzbDrone.Core.ImportLists
                     report.AuthorGoodreadsId ??= remoteBook.AuthorMetadata.Value.ForeignAuthorId;
                 }
 #if true // [HARDCOVER] Catch all exceptions from Goodreads proxy so upstream blocks do not crash sync
-                catch (Exception ex)
+                catch (BookNotFoundException)
+                {
+                    _logger.Debug($"Nothing found for edition [{report.EditionGoodreadsId}]");
+                    report.EditionGoodreadsId = null;
+                }
+                catch (System.Exception ex)
                 {
                     _logger.Debug(ex, $"Nothing found for edition [{report.EditionGoodreadsId}]");
                     report.EditionGoodreadsId = null;
@@ -245,7 +250,7 @@ namespace NzbDrone.Core.ImportLists
                             return;
                         }
                     }
-                    catch (Exception ex)
+                    catch (System.Exception ex)
                     {
                         _logger.Debug(ex, $"Failed to search metadata provider for '{report.Book}' by '{report.Author}'");
                     }

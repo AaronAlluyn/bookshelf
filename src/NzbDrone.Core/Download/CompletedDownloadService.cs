@@ -115,9 +115,7 @@ namespace NzbDrone.Core.Download
                     r.Errors != null && r.Errors.Any(e =>
                         e.IndexOf("Not an upgrade", StringComparison.OrdinalIgnoreCase) >= 0 ||
                         e.IndexOf("already imported", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        e.IndexOf("Existing file on disk", StringComparison.OrdinalIgnoreCase) >= 0
-                    )
-                );
+                        e.IndexOf("Existing file on disk", StringComparison.OrdinalIgnoreCase) >= 0));
 
                 if (allRejectedDueToExisting)
                 {
@@ -138,7 +136,7 @@ namespace NzbDrone.Core.Download
 
                     var ignoredEvent = new DownloadIgnoredEvent
                     {
-                        AuthorId = authorId,
+                        AuthorId = authorId ?? 0,
                         BookIds = bookIds,
                         Quality = trackedDownload.RemoteBook?.ParsedBookInfo?.Quality ?? new QualityModel(Quality.Unknown),
                         SourceTitle = trackedDownload.DownloadItem.Title,
